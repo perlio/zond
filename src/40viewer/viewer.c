@@ -117,13 +117,13 @@ viewer_springen_zu_pos_pdf( PdfViewer* pv, PdfPos pdf_pos, gdouble delta )
     gdouble page = rect.y1 - rect.y0;
     if ( pdf_pos.index <= page ) value = value_seite + (pdf_pos.index * pv->zoom / 100);
     else value = value_seite + (page * pv->zoom / 100);
-
+#ifndef VIEWER
     if ( pv->zond->state & GDK_MOD1_MASK )
     {
         gdouble page_size = gtk_adjustment_get_page_size( pv->v_adj );
         value -= page_size;
     }
-
+#endif // VIEWER
     gtk_adjustment_set_value( pv->v_adj, (value > delta) ? value - delta : 0 );
 
     return;

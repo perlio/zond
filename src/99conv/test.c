@@ -262,7 +262,7 @@ test( Projekt* zond, gchar** errmsg )
  //   argv[1] = "-o";
     argv[1] = "C:/Users/pkrieger/AppData/Roaming/LibreOffice/4/user/template/vorlagen/Briefkopf.ott";
 //    argv[2] = "vnd.sun.star.script:Standard.Module.Main?language=Basic&location=application";
-    argv[2] = "macro:///Standard.Module.Dokument_erzeugen(127.0.0.1:3306,root,ttttt,2,2020,3,0,0)";
+    argv[2] = "macro:///Standard.Module.Dokument_erzeugen(2,2020,3,0,0)";
 //  127.0.0.1:3306", "root", "ttttt", 2, 2020, 3, 0, 0
     ret = g_spawn_async( NULL, argv, NULL, G_SPAWN_DEFAULT, NULL, NULL, NULL,
             &error );
