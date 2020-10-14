@@ -159,9 +159,6 @@ cb_focus_out( GtkWidget* treeview, GdkEvent* event, gpointer user_data )
 
     Baum baum = baum_get_baum_from_treeview( zond, treeview );
 
-    //selection in "altem" treeview löschen
-    gtk_tree_selection_unselect_all( zond->selection[baum] );
-
     //cursor-changed-signal ausschalten
     if ( baum != BAUM_FS && zond->cursor_changed_signal )
     {
@@ -191,6 +188,9 @@ cb_focus_in( GtkWidget* treeview, GdkEvent* event, gpointer user_data )
 
     if ( baum != zond->last_baum )
     {
+        //selection in "altem" treeview löschen
+        gtk_tree_selection_unselect_all( zond->selection[zond->last_baum] );
+
         //Cursor gewählter treeview selektieren
         GtkTreePath* path = NULL;
         GtkTreeViewColumn* focus_column = NULL;

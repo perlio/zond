@@ -1083,7 +1083,6 @@ selection_paste( Projekt* zond, gboolean kind )
                 return;
             }
         }
-        else meldung( zond->app_window, "Nicht zulässig", NULL );
     }
     else if ( baum_selection == BAUM_INHALT )
     {
@@ -1137,7 +1136,6 @@ selection_paste( Projekt* zond, gboolean kind )
                 return;
             }
         }
-        else meldung( zond->app_window, "Nicht zulässig", NULL );
     }
     else if ( baum_selection == BAUM_AUSWERTUNG )
     {
@@ -1165,9 +1163,7 @@ selection_paste( Projekt* zond, gboolean kind )
                 return;
             }
         }
-        else meldung( zond->app_window, "Nicht zulässig", NULL );
     }
-    else meldung( zond->app_window, "Nicht zulässig", NULL );
 
     return;
 }
