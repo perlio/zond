@@ -64,7 +64,8 @@ selection_foreach( Projekt* zond, Baum baum, GPtrArray* refs,
                 zond->treeview[baum] ), &iter_ref, 2, &node_id, -1 );
 
         rc = foreach( zond, baum, &iter_ref, node_id, data, errmsg );
-        if ( rc ) ERROR_PAO( "selection_cb_foreach" );
+        if ( rc == -1) ERROR_PAO( "selection_cb_foreach" )
+        else if ( rc == 1 ) break; //Abbruch gewählt
     }
 
     return 0;
@@ -534,6 +535,9 @@ selection_anbinden( Projekt* zond, gint anchor_id, gboolean kind, gchar** errmsg
     return 0;
 }
 
+
+/*  Baum_Fs
+*/
 
 static gchar*
 selection_move_file( Projekt* zond, GFile* file_source, GFile* file_parent, gboolean del,

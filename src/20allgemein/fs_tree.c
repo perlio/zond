@@ -414,7 +414,7 @@ fs_tree_remove_node( Projekt* zond, GFile* file, GtkTreeIter* iter, gchar** errm
         }
         else //Fehler: einfach kein dir
         {
-            g_error_free( error );
+            g_clear_error( &error );
 
             gchar* uri = g_file_get_uri( file );
             gchar* uri_unesc = g_uri_unescape_string( uri, NULL );

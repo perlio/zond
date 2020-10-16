@@ -109,8 +109,11 @@ pv_schliessen_datei( PdfViewer* pv )
 
     pv_activate_widgets( pv, FALSE );
 
-    //Array mit texttreffern
+    viewer_close_thread_pools( pv );
+
+    //Arrays zurücksetzen
     g_array_remove_range( pv->arr_text_treffer, 0, pv->arr_text_treffer->len );
+    g_ptr_array_remove_range( pv->arr_pages, 0, pv->arr_pages->len );
 
     return;
 }
@@ -144,7 +147,13 @@ cb_pv_sa_beenden( GtkWidget* item, gpointer data )
 
     Projekt* zond = pv->zond;
 
-    viewer_schliessen( pv );
+    if ( pv->dd ) pv_schliessen_datei( pv );
+
+    g_ptr_array_unref( pv->arr_pages );
+    g_array_unref( pv->arr_text_treffer );
+
+    gtk_widget_destroy( pv->vf );
+    g_free( pv );
 
     if ( !zond->arr_pv->len ) //falls letztes viewer-Fenster:
     {
@@ -206,6 +215,9 @@ static PdfViewer*
 init( GtkApplication* app, Projekt* zond )
 {
     PdfViewer* pv = viewer_start_pv( zond );
+
+    g_signal_connect( pv->vf, "delete-event", G_CALLBACK(cb_pv_sa_beenden),
+            (gpointer) pv );
 
     gtk_application_add_window( app, GTK_WINDOW(pv->vf) );
 

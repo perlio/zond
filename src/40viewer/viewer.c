@@ -392,8 +392,6 @@ viewer_schliessen( PdfViewer* pv )
 {
     DisplayedDocument* dd = pv->dd;
 
-    if ( !dd ) return;//Sonst bei stand_alone: wenn kein Dokument angezeigt, Absturz
-
     viewer_close_thread_pools( pv );
 
     do
@@ -2059,8 +2057,12 @@ viewer_einrichten_fenster( PdfViewer* pv )
 
     g_signal_connect( pv->vf, "motion-notify-event",
             G_CALLBACK(cb_viewer_motion_notify), (gpointer) pv );
+#ifndef VIEWER //Stand-Alone hat anderen Callback zum schließen
     g_signal_connect( pv->vf, "delete-event",
             G_CALLBACK(cb_viewer_delete_event), (gpointer) pv );
+#else
+    g_signal_connect( pv->vf, "delete-event", G_CALLBACK(cb_pv_sa_beenden), pv );
+#endif // VIEWER
 
     return;
 }

@@ -873,7 +873,7 @@ cb_settings_zoom( GtkMenuItem* item, gpointer data )
     gint rc = 0;
     Projekt* zond = (Projekt*) data;
 
-    gchar* text = NULL;
+    gchar* text = g_strdup_printf( "%.0f", g_settings_get_double( zond->settings, "zoom" ) );
     rc = abfrage_frage( zond->app_window, "Zoom:", "Faktor eingeben", &text );
     if ( !text ) return;
     if ( !g_strcmp0( text, "" ) )

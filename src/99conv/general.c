@@ -222,6 +222,7 @@ abfrage_frage( GtkWidget* window, const gchar* message, const gchar* secondary, 
         GtkWidget* content = gtk_message_dialog_get_message_area( GTK_MESSAGE_DIALOG(dialog) );
         entry = gtk_entry_new( );
         gtk_container_add( GTK_CONTAINER(content), entry);
+        gtk_entry_set_text( GTK_ENTRY(entry), *text );
 
         gtk_widget_show_all( content );
 
