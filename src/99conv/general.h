@@ -40,6 +40,9 @@ void meldung( GtkWidget*, const gchar*, ... );
 
 gint abfrage_frage(GtkWidget*, const gchar*, const gchar*, gchar** );
 
+gint dialog_with_buttons( GtkWidget*, const gchar*, const gchar*, gchar**,
+        gchar*, ... );
+
 gint hat_vorfahre_datei( Projekt*, Baum, gint, gboolean, gchar** );
 
 gint knoten_verschieben( Projekt*, Baum, gint, gint, gint, gchar** );

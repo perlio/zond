@@ -539,12 +539,12 @@ selection_anbinden( Projekt* zond, gint anchor_id, gboolean kind, gchar** errmsg
 /*  Baum_Fs
 */
 
-static gchar*
-selection_move_file( Projekt* zond, GFile* file_source, GFile* file_parent, gboolean del,
-        gchar** errmsg )
+static gint
+selection_move_file( Projekt* zond, GFile* file_source, GFile* file_parent,
+        gboolean del, gchar** basename, gchar** errmsg )
 {
-    gchar* basename = NULL;
     gint zaehler = 0;
+    gchar* basename_tmp = NULL;
     gboolean (*verschieben) ( GFile*, GFile*, GFileCopyFlags, GCancellable*,
             GFileProgressCallback, gpointer, GError** ); //function-ptr
 
@@ -553,7 +553,7 @@ selection_move_file( Projekt* zond, GFile* file_source, GFile* file_parent, gboo
     else verschieben = g_file_copy;
 
     //dest_file
-    basename = g_file_get_basename( file_source );
+    basename_tmp = g_file_get_basename( file_source );
     do
     {
         gchar* basename_new = NULL;
@@ -561,13 +561,13 @@ selection_move_file( Projekt* zond, GFile* file_source, GFile* file_parent, gboo
         gboolean success = FALSE;
         GError* error = NULL;
 
-        if ( zaehler == 0 ) basename_new = g_strdup( basename );
-        else if ( zaehler == 1 ) basename_new = g_strconcat( basename, " - Kopie", NULL );
+        if ( zaehler == 0 ) basename_new = g_strdup( basename_tmp );
+        else if ( zaehler == 1 ) basename_new = g_strconcat( basename_tmp, " - Kopie", NULL );
         else if ( zaehler > 1 )
         {
             gchar* zusatz = NULL;
             zusatz = g_strdup_printf( " - Kopie (%d)", zaehler - 1 );
-            basename_new = g_strconcat( basename, zusatz, NULL );
+            basename_new = g_strconcat( basename_tmp, zusatz, NULL );
             g_free( zusatz );
         }
 
@@ -602,19 +602,19 @@ selection_move_file( Projekt* zond, GFile* file_source, GFile* file_parent, gboo
                     g_free( errmsg_ii );
                 }
 
-                g_free( basename );
+                g_free( basename_tmp );
                 g_free( basename_new );
                 g_object_unref( file_dest );
 
-                return NULL;
+                return -1;
             }
         }
         g_object_unref( file_dest );
 
         if ( success )
         {
-            g_free( basename );
-            basename = basename_new;
+            g_free( basename_tmp );
+            *basename = basename_new;
 
             break;
         }
@@ -634,37 +634,35 @@ selection_move_file( Projekt* zond, GFile* file_source, GFile* file_parent, gboo
                 if ( errmsg && error ) *errmsg = g_strconcat( "Bei Aufruf g_file_move/copy:\n",
                         error->message, NULL );
 
-                g_free( basename );
+                g_free( basename_tmp );
                 g_error_free( error );
 
-                return NULL;
+                return -1;
             }
         }
     } while ( 1 );
 
-    return basename;
+    return 0;
 }
 
 
-static gchar*
-selection_copy_dir( Projekt* zond, GFile* file_source, GFile* file_parent, gchar** errmsg )
+static gint
+selection_copy_dir( Projekt* zond, GFile* file_source, GFile* file_parent, gchar** basename, gchar** errmsg )
 {
-    gchar* basename = NULL;
-    gchar* basename_new = NULL;
     GError* error = NULL;
+    gchar* str_tmp = NULL;
     GFile* file_dir = NULL;
     GFile* file_dir_new = NULL;
 
     //path_new_dir = file_parent + basename(file_source)
-    basename = g_file_get_basename( file_source );
+    str_tmp = g_file_get_basename( file_source );
 
-    file_dir = g_file_get_child( file_parent, basename );
-    g_free( basename );
+    file_dir = g_file_get_child( file_parent, str_tmp );
+    g_free( str_tmp );
 
     file_dir_new = fs_insert_dir( file_dir, TRUE, errmsg );
     g_object_unref( file_dir );
-
-    if ( !file_dir_new )  return NULL;
+    if ( !file_dir_new ) ERROR_PAO( "fs_insert_dir" )
 
     GFileEnumerator* enumer = g_file_enumerate_children( file_source, "*", G_FILE_QUERY_INFO_NONE, NULL, &error );
     if ( !enumer )
@@ -674,7 +672,7 @@ selection_copy_dir( Projekt* zond, GFile* file_source, GFile* file_parent, gchar
                 error->message, NULL );
         g_error_free( error );
 
-        return NULL;
+        return -1;
     }
 
     GFile* child = NULL;
@@ -690,7 +688,7 @@ selection_copy_dir( Projekt* zond, GFile* file_source, GFile* file_parent, gchar
                     error->message, NULL );
             g_error_free( error );
 
-            return NULL;
+            return -1;
         }
 
         if ( child ) //es gibt noch Datei in Verzeichnis
@@ -703,17 +701,18 @@ selection_copy_dir( Projekt* zond, GFile* file_source, GFile* file_parent, gchar
                     g_object_unref( enumer );
                     g_object_unref( file_dir_new );
 
-                    ERROR_PAO_R( "fs_insert_dir", NULL );
+                    ERROR_PAO( "fs_insert_dir" );
                 }
             }
             else if ( type == G_FILE_TYPE_REGULAR )
             {
-                if ( !selection_move_file( zond, child, file_dir_new, FALSE, errmsg ) )
+                if ( selection_move_file( zond, child, file_dir_new, FALSE,
+                        basename, errmsg ) == -1 )
                 {
                     g_object_unref( file_dir_new );
                     g_object_unref( enumer );
 
-                    ERROR_PAO_R( "fs_insert_dir", NULL );
+                    ERROR_PAO( "selection_move_file" );
                 }
 
             }
@@ -721,12 +720,12 @@ selection_copy_dir( Projekt* zond, GFile* file_source, GFile* file_parent, gchar
         else break;
     }
 
-    basename_new = g_file_get_basename( file_dir_new );
+    *basename = g_file_get_basename( file_dir_new );
 
     g_object_unref( file_dir_new );
     g_object_unref( enumer );
 
-    return basename_new;
+    return 0;
 }
 
 
@@ -744,6 +743,7 @@ static gint
 selection_foreach_baum_fs_to_baum_fs( Projekt* zond, Baum baum,
         GtkTreeIter* iter, gint node_id, gpointer data, gchar** errmsg )
 {
+    gint rc = 0;
     GFile* file_source = NULL;
     gchar* basename = NULL;
     gchar* path_source = NULL;
@@ -809,12 +809,13 @@ selection_foreach_baum_fs_to_baum_fs( Projekt* zond, Baum baum,
     //Kopieren/verschieben
     if ( g_file_query_file_type( file_source, G_FILE_QUERY_INFO_NONE, NULL )
             != G_FILE_TYPE_REGULAR && !zond->clipboard.ausschneiden )
-            basename = selection_copy_dir( zond, file_source, s_selection->file_parent, errmsg );
-    else basename = selection_move_file( zond, file_source, s_selection->file_parent, zond->clipboard.ausschneiden, errmsg );
+            rc = selection_copy_dir( zond, file_source, s_selection->file_parent, &basename, errmsg );
+    else rc = selection_move_file( zond, file_source, s_selection->file_parent, zond->clipboard.ausschneiden, &basename, errmsg );
 
     g_object_unref( file_source );
 
-    if ( !basename ) ERROR_PAO( "selection_move_file" )
+    if ( rc == -1 ) ERROR_PAO( "selection_move_file/_copy_dir" )
+    else if ( rc == 1 ) return 1; //selection_foreach interpretiert dies als Abbruch
 
     s_selection->inserted = TRUE;
 

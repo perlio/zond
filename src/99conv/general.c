@@ -241,6 +241,61 @@ abfrage_frage( GtkWidget* window, const gchar* message, const gchar* secondary, 
 }
 
 
+/** ... response_id, next_button_text, next_response_id, ..., NULL
+**/
+gint
+dialog_with_buttons( GtkWidget* window, const gchar* message,
+        const gchar* secondary, gchar** text, gchar* first_button_text, ... )
+{
+    gint res;
+    GtkWidget* entry = NULL;
+    va_list arg_pointer;
+    gchar* button_text = NULL;
+
+    va_start( arg_pointer, first_button_text );
+
+   GtkWidget* dialog = gtk_message_dialog_new( GTK_WINDOW(window),
+            GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION,
+            GTK_BUTTONS_NONE, message, NULL );
+    gtk_message_dialog_format_secondary_text( GTK_MESSAGE_DIALOG(dialog), "%s",
+            secondary );
+
+    //buttons einfügen
+    button_text = first_button_text;
+    while ( button_text )
+    {
+        gint response_id = 0;
+
+        response_id = va_arg( arg_pointer, gint );
+
+        gtk_dialog_add_button( GTK_DIALOG( dialog), button_text, response_id );
+
+        button_text = va_arg( arg_pointer, gchar* );
+    }
+
+    if ( text )
+    {
+        GtkWidget* content = gtk_message_dialog_get_message_area( GTK_MESSAGE_DIALOG(dialog) );
+        entry = gtk_entry_new( );
+        gtk_container_add( GTK_CONTAINER(content), entry);
+        gtk_entry_set_text( GTK_ENTRY(entry), *text );
+
+        gtk_widget_show_all( content );
+
+        g_signal_connect( entry, "activate", G_CALLBACK(cb_entry_text),
+                (gpointer) dialog );
+    }
+
+    res = gtk_dialog_run( GTK_DIALOG(dialog) );
+
+    if ( text ) *text = g_strdup( gtk_entry_get_text( GTK_ENTRY(entry) ) );
+
+    gtk_widget_destroy( dialog );
+
+    return res;
+}
+
+
 #ifndef VIEWER
 /** Wenn Fehler: -1
     Wenn Vorfahre Datei ist: 1
