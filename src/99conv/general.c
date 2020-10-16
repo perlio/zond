@@ -197,47 +197,11 @@ meldung( GtkWidget* window, const gchar* text1, ... )
 
 
 static void
-cb_entry_text( GtkEntry* entry, gpointer dialog )
+cb_entry_text( GtkEntry* entry, gpointer data )
 {
-    gtk_dialog_response( GTK_DIALOG(dialog), GTK_RESPONSE_YES );
+    gtk_widget_grab_focus( (GtkWidget*) data );
 
     return;
-}
-
-
-gint
-abfrage_frage( GtkWidget* window, const gchar* message, const gchar* secondary, gchar** text )
-{
-    gint res;
-    GtkWidget* entry = NULL;
-
-    GtkWidget* dialog = gtk_message_dialog_new( GTK_WINDOW(window),
-            GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION,
-            GTK_BUTTONS_YES_NO, message, NULL );
-    gtk_message_dialog_format_secondary_text( GTK_MESSAGE_DIALOG(dialog), "%s",
-            secondary );
-
-    if ( text )
-    {
-        GtkWidget* content = gtk_message_dialog_get_message_area( GTK_MESSAGE_DIALOG(dialog) );
-        entry = gtk_entry_new( );
-        gtk_container_add( GTK_CONTAINER(content), entry);
-        gtk_entry_set_text( GTK_ENTRY(entry), *text );
-
-        gtk_widget_show_all( content );
-
-        g_signal_connect( entry, "activate", G_CALLBACK(cb_entry_text),
-                (gpointer) dialog );
-    }
-
-    res = gtk_dialog_run( GTK_DIALOG(dialog) );
-
-    if ( res == GTK_RESPONSE_YES && text ) *text =
-            g_strdup( gtk_entry_get_text( GTK_ENTRY(entry) ) );
-
-    gtk_widget_destroy( dialog );
-
-    return res;
 }
 
 
@@ -251,6 +215,8 @@ dialog_with_buttons( GtkWidget* window, const gchar* message,
     GtkWidget* entry = NULL;
     va_list arg_pointer;
     gchar* button_text = NULL;
+    GtkWidget* button = NULL;
+    gboolean first_button = TRUE;
 
     va_start( arg_pointer, first_button_text );
 
@@ -264,11 +230,17 @@ dialog_with_buttons( GtkWidget* window, const gchar* message,
     button_text = first_button_text;
     while ( button_text )
     {
+        GtkWidget* tmp = NULL;
         gint response_id = 0;
 
         response_id = va_arg( arg_pointer, gint );
 
-        gtk_dialog_add_button( GTK_DIALOG( dialog), button_text, response_id );
+        tmp = gtk_dialog_add_button( GTK_DIALOG(dialog), button_text, response_id );
+        if ( first_button )
+        {
+            button = tmp;
+            first_button = FALSE;
+        }
 
         button_text = va_arg( arg_pointer, gchar* );
     }
@@ -283,7 +255,7 @@ dialog_with_buttons( GtkWidget* window, const gchar* message,
         gtk_widget_show_all( content );
 
         g_signal_connect( entry, "activate", G_CALLBACK(cb_entry_text),
-                (gpointer) dialog );
+                (gpointer) button );
     }
 
     res = gtk_dialog_run( GTK_DIALOG(dialog) );
@@ -291,6 +263,20 @@ dialog_with_buttons( GtkWidget* window, const gchar* message,
     if ( text ) *text = g_strdup( gtk_entry_get_text( GTK_ENTRY(entry) ) );
 
     gtk_widget_destroy( dialog );
+
+    return res;
+}
+
+
+/** wrapper
+**/
+gint
+abfrage_frage( GtkWidget* window, const gchar* message, const gchar* secondary, gchar** text )
+{
+    gint res;
+
+    res = dialog_with_buttons( window, message, secondary, text, "Ok",
+            GTK_RESPONSE_YES, "Abbrechen", GTK_RESPONSE_CANCEL, NULL );
 
     return res;
 }
