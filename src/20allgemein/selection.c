@@ -678,8 +678,9 @@ selection_copy_dir( Projekt* zond, GFile* file_source, GFile* file_parent, gchar
     GFile* child = NULL;
     GFileInfo* info_child = NULL;
 
-    while ( 1 )
+    while ( 1 ) //Dateien in Verzeichnis durchgehen...
     {
+        //Fehler:
         if ( !g_file_enumerator_iterate( enumer, &info_child, &child, NULL, &error ) )
         {
             g_object_unref( file_dir_new );
@@ -696,13 +697,11 @@ selection_copy_dir( Projekt* zond, GFile* file_source, GFile* file_parent, gchar
             GFileType type = g_file_info_get_file_type( info_child );
             if ( type == G_FILE_TYPE_DIRECTORY )
             {
-                if ( !fs_insert_dir( child, TRUE, errmsg ) )
-                {
-                    g_object_unref( enumer );
-                    g_object_unref( file_dir_new );
+                gint rc = 0;
 
-                    ERROR_PAO( "fs_insert_dir" );
-                }
+                rc = selection_copy_dir( zond, child, file_source, basename, errmsg );
+                if ( rc == -1 ) ERROR_PAO( "selection_copy_dir" )
+                else if ( rc == 1 ) return 1;
             }
             else if ( type == G_FILE_TYPE_REGULAR )
             {
@@ -717,7 +716,7 @@ selection_copy_dir( Projekt* zond, GFile* file_source, GFile* file_parent, gchar
 
             }
         } //ende if ( child )
-        else break;
+        else break; //Keine Datei (mehr)
     }
 
     *basename = g_file_get_basename( file_dir_new );
@@ -959,6 +958,7 @@ selection_baum_fs_to_baum_fs( Projekt* zond, gboolean kind, gchar** errmsg )
 
         gtk_tree_path_free( path );
     } */
+
     //wenn nicht in nicht ausgeklapptes Verzeichnis eingefügt wurde: ausklappen
     if ( !kind || expanded ) baum_setzen_cursor( zond, BAUM_FS,
             s_selection.iter_cursor );

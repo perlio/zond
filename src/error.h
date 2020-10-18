@@ -37,11 +37,6 @@
                         "Bei Aufruf " x ":\n", fz_caught_message( y ), NULL ) ); \
                          return -1; }
 
-#define ERROR_MUPDF_THREAD(x,y) { if ( errmsg ) *errmsg = add_string( *errmsg, g_strconcat( \
-                        "Bei Aufruf " x ":\n", fz_caught_message( y ), NULL ) ); \
-                        fz_drop_context( y ); \
-                        return -1; }
-
 #define ROLLBACK \
           { rc = db_rollback( zond, errmsg ); \
             if ( !rc && errmsg ) *errmsg = add_string( *errmsg, \

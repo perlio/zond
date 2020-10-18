@@ -890,18 +890,5 @@ treeviews_init_fs_tree( Projekt* zond )
     g_signal_connect( zond->treeview[BAUM_FS], "button-press-event",
             G_CALLBACK(cb_fs_tree_button_press), (gpointer) zond );
 
-/*
-    //dnd erfassen - nur BAUM_AUSWERTUNG
-    g_signal_connect( GTK_WIDGET(zond->treeview[BAUM_AUSWERTUNG]), "drag-begin",
-            G_CALLBACK(cb_drag_begin), (gpointer) zond );
-    g_signal_connect( GTK_WIDGET(zond->treeview[BAUM_AUSWERTUNG]), "drag-end",
-            G_CALLBACK(cb_drag_end), (gpointer) zond );
-
-    g_signal_connect( gtk_tree_view_get_model(zond->treeview[BAUM_AUSWERTUNG]),
-            "row-changed", G_CALLBACK(cb_row_changed), (gpointer) zond );
-*/
-
-
-
     return;
 }

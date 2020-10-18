@@ -94,24 +94,14 @@ fs_tree_get_full_path( Projekt* zond, GtkTreeIter* iter )
 }
 
 
-/** iter zeigt auf Verzeichnis, was zu füllen ist
-    Es wurde bereits getestet, ob das Verzeichnis bereits geladen wurde
-**/
 gint
-fs_tree_load_dir( Projekt* zond, GtkTreeIter* iter, gchar** errmsg )
+fs_tree_dir_foreach( Projekt* zond, GFile* dir,
+        gint (*foreach) ( Projekt*, GFile*, GFile*, GFileInfo*, gpointer, gchar** ),
+        gpointer data, gchar** errmsg )
 {
-    //path des directory aus tree holen
-    gchar* path_dir = NULL;
-
-    path_dir = fs_tree_get_full_path( zond, iter ); //keine Fehlerrückgabe0
-
     GError* error = NULL;
 
-    GFile* dir = g_file_new_for_path( path_dir );
-    g_free( path_dir );
-
     GFileEnumerator* enumer = g_file_enumerate_children( dir, "*", G_FILE_QUERY_INFO_NONE, NULL, &error );
-    g_object_unref( dir );
     if ( !enumer )
     {
         if ( errmsg ) *errmsg = g_strconcat( "Bei Aufruf g_file_enumerate_children:\n",
@@ -121,12 +111,11 @@ fs_tree_load_dir( Projekt* zond, GtkTreeIter* iter, gchar** errmsg )
         return -1;
     }
 
-    GFile* child = NULL;
-    GFileInfo* info_child = NULL;
-    GtkTreeIter iter_new;
-
     while ( 1 )
     {
+        GFile* child = NULL;
+        GFileInfo* info_child = NULL;
+
         if ( !g_file_enumerator_iterate( enumer, &info_child, &child, NULL, &error ) )
         {
             if ( errmsg ) *errmsg = g_strconcat( "Bei Aufruf g_file_enumerator_iterate:\n",
@@ -139,50 +128,94 @@ fs_tree_load_dir( Projekt* zond, GtkTreeIter* iter, gchar** errmsg )
 
         if ( child ) //es gibt noch Datei in Verzeichnis
         {
-            //child in tree einfügen
-            gtk_tree_store_insert( GTK_TREE_STORE(gtk_tree_view_get_model( zond->treeview[BAUM_FS] )), &iter_new, iter, -1 );
-            gtk_tree_store_set( GTK_TREE_STORE(gtk_tree_view_get_model(
-                    zond->treeview[BAUM_FS] )), &iter_new,
-                    0, g_file_info_get_icon( info_child ),
-                    1, g_file_info_get_display_name( info_child ), -1 );
+            gint rc = 0;
 
-            //falls directory: überprüfen ob leer, falls nicht, dummy als child
-            GFileType type = g_file_info_get_file_type( info_child );
-            if ( type == G_FILE_TYPE_DIRECTORY )
+            rc = foreach( zond, dir, child, info_child, data, errmsg );
+            if ( rc == -1 )
             {
-                GFileEnumerator* enumer_child = g_file_enumerate_children( child, "*", G_FILE_QUERY_INFO_NONE, NULL, &error );
-                if ( !enumer_child )
-                {
-                    if ( errmsg ) *errmsg = g_strconcat( "Bei Aufruf g_file_enumerate_children:\n",
-                            error->message, NULL );
-                    g_error_free( error );
-                    g_object_unref( enumer );
-
-                    return -1;
-                }
-
-                GFile* grand_child = NULL;
-                GtkTreeIter newest_iter;
-
-                if ( !g_file_enumerator_iterate( enumer_child, NULL, &grand_child, NULL, &error ) )
-                {
-                    if ( errmsg ) *errmsg = g_strconcat( "Bei Aufruf g_file_enumerator_iterate:\n",
-                            error->message, NULL );
-                    g_error_free( error );
-                    g_object_unref( enumer );
-                    g_object_unref( enumer_child );
-
-                    return -1;
-                }
-                g_object_unref( enumer_child );
-
-                if ( grand_child ) gtk_tree_store_insert( GTK_TREE_STORE(gtk_tree_view_get_model( zond->treeview[BAUM_FS] )), &newest_iter, &iter_new, -1 );
+                g_object_unref( enumer );
+                ERROR_PAO( "foreach" )
             }
+            else if ( rc == 1 ) break;//Abbruch gewählt
         } //ende if ( child )
         else break;
     }
 
     g_object_unref( enumer );
+
+    return 0;
+}
+
+
+/** iter zeigt auf Verzeichnis, was zu füllen ist
+    Es wurde bereits getestet, ob das Verzeichnis bereits geladen wurde
+**/
+static gint
+fs_tree_load_dir_foreach( Projekt* zond, GFile* dir_parent, GFile* file,
+        GFileInfo* info, gpointer data, gchar** errmsg )
+{
+    GtkTreeIter iter_new = { 0 };
+
+    GtkTreeIter* iter = (GtkTreeIter*) data;
+
+    //child in tree einfügen
+    gtk_tree_store_insert( GTK_TREE_STORE(gtk_tree_view_get_model( zond->treeview[BAUM_FS] )), &iter_new, iter, -1 );
+    gtk_tree_store_set( GTK_TREE_STORE(gtk_tree_view_get_model(
+            zond->treeview[BAUM_FS] )), &iter_new,
+            0, g_file_info_get_icon( info ),
+            1, g_file_info_get_display_name( info ), -1 );
+
+    //falls directory: überprüfen ob leer, falls nicht, dummy als child
+    GFileType type = g_file_info_get_file_type( info );
+    if ( type == G_FILE_TYPE_DIRECTORY )
+    {
+        GError* error = NULL;
+
+        GFileEnumerator* enumer_child = g_file_enumerate_children( file, "*", G_FILE_QUERY_INFO_NONE, NULL, &error );
+        if ( !enumer_child )
+        {
+            if ( errmsg ) *errmsg = g_strconcat( "Bei Aufruf g_file_enumerate_children:\n",
+                    error->message, NULL );
+            g_error_free( error );
+
+            return -1;
+        }
+
+        GFile* grand_child = NULL;
+        GtkTreeIter newest_iter;
+
+        if ( !g_file_enumerator_iterate( enumer_child, NULL, &grand_child, NULL, &error ) )
+        {
+            if ( errmsg ) *errmsg = g_strconcat( "Bei Aufruf g_file_enumerator_iterate:\n",
+                    error->message, NULL );
+            g_error_free( error );
+            g_object_unref( enumer_child );
+
+            return -1;
+        }
+        g_object_unref( enumer_child );
+
+        if ( grand_child ) gtk_tree_store_insert( GTK_TREE_STORE(gtk_tree_view_get_model( zond->treeview[BAUM_FS] )), &newest_iter, &iter_new, -1 );
+    }
+
+    return 0;
+}
+
+
+gint
+fs_tree_load_dir( Projekt* zond, GtkTreeIter* iter, gchar** errmsg )
+{
+    gchar* path_dir = NULL;
+    gint rc = 0;
+
+    //path des directory aus tree holen
+    path_dir = fs_tree_get_full_path( zond, iter ); //keine Fehlerrückgabe0
+
+    GFile* dir = g_file_new_for_path( path_dir );
+    g_free( path_dir );
+
+    rc = fs_tree_dir_foreach( zond, dir, fs_tree_load_dir_foreach, iter, errmsg );
+    if ( rc ) ERROR_PAO( "fs_tree_dir_foreach" )
 
     return 0;
 }
@@ -391,93 +424,58 @@ fs_tree_create_sojus_zentral( Projekt* zond, gchar** errmsg )
 }
 
 
+gint fs_tree_remove_node( Projekt*, GFile*, GtkTreeIter*, gchar** );
+
+
+static gint
+fs_tree_foreach_remove_dir( Projekt* zond, GFile* dir, GFile* file,
+        GFileInfo* info, gpointer data, gchar** errmsg )
+{
+    gint rc = 0;
+    gboolean* rest = (gboolean*) data;
+
+    rc = fs_tree_remove_node( zond, file, NULL, errmsg );
+    if ( rc == -1 ) ERROR_PAO( "fs_tree_remove_node" )
+    else if ( rc == 1 ) *rest = TRUE;
+
+    return 0;
+}
+
+
 gint
 fs_tree_remove_node( Projekt* zond, GFile* file, GtkTreeIter* iter, gchar** errmsg )
 {
     gint rc = 0;
-    GFileEnumerator* file_enum = NULL;
-    GError* error = NULL;
-
-    file_enum = g_file_enumerate_children( file, "*", G_FILE_QUERY_INFO_NONE, NULL, &error );
-
-    //path ist kein directory
-    if ( !file_enum )
-    {
-        //anderer Fehler als ist kein dir
-        if ( error->code != G_IO_ERROR_NOT_DIRECTORY )
-        {
-            if ( errmsg ) *errmsg = g_strconcat( "Bei Aufruf g_file_enumerate_children:\n",
-                    error->message, NULL );
-            g_error_free( error );
-
-            return -1;
-        }
-        else //Fehler: einfach kein dir
-        {
-            g_clear_error( &error );
-
-            gchar* uri = g_file_get_uri( file );
-            gchar* uri_unesc = g_uri_unescape_string( uri, NULL );
-            g_free( uri );
-            gchar* rel_path = g_strdup( uri_unesc + 8 + strlen( zond->project_dir ) );
-            g_free( uri_unesc );
-
-            rc = db_get_node_id_from_rel_path( zond, rel_path, errmsg );
-            g_free( rel_path );
-
-            if ( rc == -1 ) ERROR_PAO( "db_get_node_id_from_rel_path" )
-
-            if ( rc > 0 ) return 1; //rel_path ist angebunden
-
-            if ( !g_file_delete( file, NULL, &error ) )
-            {
-                if ( errmsg ) *errmsg = g_strconcat( "Bei Aufruf g_file_delete:\n",
-                        error->message, NULL );
-                g_error_free( error );
-
-                return -1;
-            }
-
-            if ( iter ) gtk_tree_store_remove( GTK_TREE_STORE(gtk_tree_view_get_model( zond->treeview[BAUM_FS] )), iter );
-
-            return 0;
-        }
-    }
-
-    //ist directory
-    GFile* child = NULL;
+    GFileType type = G_FILE_TYPE_UNKNOWN;
     gboolean rest = FALSE;
 
-    while ( 1 )
+    type = g_file_query_file_type( file, G_FILE_QUERY_INFO_NONE, NULL );
+
+    if ( type != G_FILE_TYPE_DIRECTORY )
     {
-        if ( !g_file_enumerator_iterate( file_enum, NULL, &child, NULL, &error ) )
-        { //Verzeichnis enthät keine Dateien
-            if ( errmsg ) *errmsg = g_strconcat( "Bei Aufruf g_file_enumerator_iterate:\n",
-                    error->message, NULL );
-            g_error_free( error );
-            g_object_unref( file_enum );
+        gchar* uri = g_file_get_uri( file );
+        gchar* uri_unesc = g_uri_unescape_string( uri, NULL );
+        g_free( uri );
+        gchar* rel_path = g_strdup( uri_unesc + 8 + strlen( zond->project_dir - 1 ) );
+        g_free( uri_unesc );
 
-            return -1;
-        }
+        rc = db_get_node_id_from_rel_path( zond, rel_path, errmsg );
+        g_free( rel_path );
 
-        if ( child ) //es gibt noch Datei in Verzeichnis
-        {
-            rc = fs_tree_remove_node( zond, child, NULL, errmsg );
-            if ( rc == -1 )
-            {
-                g_object_unref( file_enum );
+        if ( rc == -1 ) ERROR_PAO( "db_get_node_id_from_rel_path" )
 
-                return -1;
-            }
-            else if ( rc == 1 ) rest = TRUE;
-        } //ende if ( child )
-        else break;
+        if ( rc > 0 ) return 1; //rel_path ist angebunden
     }
-
-    g_object_unref( file_enum );
+    else
+    {
+        rc = fs_tree_dir_foreach( zond, file, fs_tree_foreach_remove_dir, &rest, errmsg );
+        if ( rc == -1 ) ERROR_PAO( "fs_tree_foreach" )
+    }
 
     if ( !rest )
     {
+        GError* error = NULL;
+
         if ( !g_file_delete( file, NULL, &error ) )
         {
             if ( errmsg ) *errmsg = g_strconcat( "Bei Aufruf g_file_delete:\n",
