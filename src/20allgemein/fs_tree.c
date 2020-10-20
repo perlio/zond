@@ -466,24 +466,33 @@ fs_tree_remove_node( Projekt* zond, GFile* file, GtkTreeIter* iter, gchar** errm
 
         if ( rc > 0 ) return 1; //rel_path ist angebunden
     }
-    else
+    else //Verzeichnis - muß erst geleert werden
     {
         rc = fs_tree_dir_foreach( zond, file, fs_tree_foreach_remove_dir, &rest, errmsg );
-        if ( rc == -1 ) ERROR_PAO( "fs_tree_foreach" )
+        if ( rc == -1 ) ERROR_PAO( "fs_tree_dir_foreach" )
     }
 
-    if ( !rest )
+    if ( !rest ) //entweder Datei oder leeres Verzeichnis
     {
-        GError* error = NULL;
-
-        if ( !g_file_delete( file, NULL, &error ) )
+        do
         {
-            if ( errmsg ) *errmsg = g_strconcat( "Bei Aufruf g_file_delete:\n",
-                    error->message, NULL );
-            g_error_free( error );
+            GError* error = NULL;
 
-            return -1;
-        }
+            if ( !g_file_delete( file, NULL, &error ) )
+            {
+                gint res = dialog_with_buttons( zond->app_window, "Fehler beim Löschen Datei",
+                        error->message, NULL, "Erneut versuchen", 1,
+                        "Überspringen", 2, "Abbrechen", GTK_RESPONSE_CANCEL, NULL );
+
+                g_error_free( error );
+
+                if ( res == 1 ) continue;
+                else if ( res == 2 ) return 1;
+                else if ( res == 3 ) return 0;
+            }
+            else break;
+        } while ( 1 );
+
         if ( iter ) gtk_tree_store_remove( GTK_TREE_STORE(gtk_tree_view_get_model( zond->treeview[BAUM_FS] )), iter );
     }
     else if ( iter )

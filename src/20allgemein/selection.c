@@ -591,14 +591,14 @@ selection_move_file( Projekt* zond, GFile* file_source, GFile* file_parent,
             g_free( rel_path_new );
             if ( rc )
             {
-                if ( errmsg ) *errmsg = g_strconcat( "Bei Aufruf db_update_path:\n", *errmsg, NULL );
+                if ( errmsg ) *errmsg = add_string( "Bei Aufruf db_update_path:\n", *errmsg );
 
                 gchar* errmsg_ii = NULL;
                 rc = db_rollback_both( zond, &errmsg_ii );
                 if ( rc )
                 {
                     errmsg_ii = prepend_string( errmsg_ii, "Bei Aufruf db_rollback_both:\n" );
-                    if ( errmsg ) *errmsg = g_strconcat( *errmsg, errmsg_ii, NULL );
+                    if ( errmsg ) *errmsg = add_string( *errmsg, errmsg_ii );
                     g_free( errmsg_ii );
                 }
 
@@ -629,6 +629,27 @@ selection_move_file( Projekt* zond, GFile* file_source, GFile* file_parent,
 
                 continue;
             }
+            else if ( del && g_error_matches( error, G_IO_ERROR,
+                    G_IO_ERROR_PERMISSION_DENIED ) )
+            {
+                g_clear_error( &error );
+
+                gint res = dialog_with_buttons( zond->app_window, "Zugriff nicht erlaubt",
+                        "Datei möglicherweise geöffnet", NULL, "Erneut versuchen", 1,
+                        "Überspringen", 2, "Abbrechen", GTK_RESPONSE_CANCEL, NULL );
+
+                if ( res == 1 ) continue;
+                else if ( res == 2 )
+                {
+                    g_free( basename_tmp );
+                    return 2;
+                }
+                else
+                {
+                    g_free( basename_tmp );
+                    return 1;
+                }
+            }
             else
             {
                 if ( errmsg && error ) *errmsg = g_strconcat( "Bei Aufruf g_file_move/copy:\n",
@@ -647,12 +668,60 @@ selection_move_file( Projekt* zond, GFile* file_source, GFile* file_parent,
 
 
 static gint
-selection_copy_dir( Projekt* zond, GFile* file_source, GFile* file_parent, gchar** basename, gchar** errmsg )
+selection_move_dir( Projekt* zond, GFile* file_source, GFile* file_parent, gchar** basename, gchar** errmsg )
 {
-    GError* error = NULL;
+    gint rc = 0;
+
+    rc = selection_move_file( zond, file_source, file_parent, TRUE, basename, errmsg );
+    if ( rc == -1 ) ERROR_PAO( "selection_move_file" )
+
+    return rc;
+}
+
+
+gint selection_copy_dir( Projekt*, GFile*, GFile*, gchar**, gchar** );
+
+
+static gint
+selection_foreach_copy_dir( Projekt* zond, GFile* file, GFile* child,
+        GFileInfo* info_child, gpointer data, gchar** errmsg )
+{
+    gchar* basename = NULL;
+
+    GFile* file_dir_new = (GFile*) data;
+
+    GFileType type = g_file_info_get_file_type( info_child );
+    if ( type == G_FILE_TYPE_DIRECTORY )
+    {
+        gint rc = 0;
+
+        rc = selection_copy_dir( zond, child, file, &basename, errmsg );
+        g_free( basename );
+        if ( rc == -1 ) ERROR_PAO( "selection_copy_dir" )
+    }
+    else if ( type == G_FILE_TYPE_REGULAR )
+    {
+        gint rc = 0;
+
+        rc = selection_move_file( zond, child, file_dir_new, FALSE,
+                &basename, errmsg );
+        g_free( basename );
+        if ( rc == -1 ) ERROR_PAO( "selection_move_file" ) //del == FALSE->kein anderer Fehler
+    }
+
+    return 0;
+}
+
+
+/** Gibt niemals 2 zurück, da Verzeichnis immer eingefügt wird **/
+gint
+selection_copy_dir( Projekt* zond, GFile* file_source, GFile* file_parent,
+        gchar** basename, gchar** errmsg )
+{
     gchar* str_tmp = NULL;
     GFile* file_dir = NULL;
     GFile* file_dir_new = NULL;
+    gint rc = 0;
 
     //path_new_dir = file_parent + basename(file_source)
     str_tmp = g_file_get_basename( file_source );
@@ -664,65 +733,16 @@ selection_copy_dir( Projekt* zond, GFile* file_source, GFile* file_parent, gchar
     g_object_unref( file_dir );
     if ( !file_dir_new ) ERROR_PAO( "fs_insert_dir" )
 
-    GFileEnumerator* enumer = g_file_enumerate_children( file_source, "*", G_FILE_QUERY_INFO_NONE, NULL, &error );
-    if ( !enumer )
+    rc = fs_tree_dir_foreach( zond, file_source, selection_foreach_copy_dir, file_dir_new, errmsg );
+    if ( rc == -1 ) //Fehler, sonst immer 0
     {
         g_object_unref( file_dir_new );
-        if ( errmsg ) *errmsg = g_strconcat( "Bei Aufruf g_file_enumerate_children:\n",
-                error->message, NULL );
-        g_error_free( error );
-
-        return -1;
-    }
-
-    GFile* child = NULL;
-    GFileInfo* info_child = NULL;
-
-    while ( 1 ) //Dateien in Verzeichnis durchgehen...
-    {
-        //Fehler:
-        if ( !g_file_enumerator_iterate( enumer, &info_child, &child, NULL, &error ) )
-        {
-            g_object_unref( file_dir_new );
-            g_object_unref( enumer );
-            if ( errmsg ) *errmsg = g_strconcat( "Bei Aufruf g_file_enumerator_iterate:\n",
-                    error->message, NULL );
-            g_error_free( error );
-
-            return -1;
-        }
-
-        if ( child ) //es gibt noch Datei in Verzeichnis
-        {
-            GFileType type = g_file_info_get_file_type( info_child );
-            if ( type == G_FILE_TYPE_DIRECTORY )
-            {
-                gint rc = 0;
-
-                rc = selection_copy_dir( zond, child, file_source, basename, errmsg );
-                if ( rc == -1 ) ERROR_PAO( "selection_copy_dir" )
-                else if ( rc == 1 ) return 1;
-            }
-            else if ( type == G_FILE_TYPE_REGULAR )
-            {
-                if ( selection_move_file( zond, child, file_dir_new, FALSE,
-                        basename, errmsg ) == -1 )
-                {
-                    g_object_unref( file_dir_new );
-                    g_object_unref( enumer );
-
-                    ERROR_PAO( "selection_move_file" );
-                }
-
-            }
-        } //ende if ( child )
-        else break; //Keine Datei (mehr)
+        ERROR_PAO( "fs_tree_dir_foreach" )
     }
 
     *basename = g_file_get_basename( file_dir_new );
 
     g_object_unref( file_dir_new );
-    g_object_unref( enumer );
 
     return 0;
 }
@@ -748,6 +768,7 @@ selection_foreach_baum_fs_to_baum_fs( Projekt* zond, Baum baum,
     gchar* path_source = NULL;
     gboolean same_dir = FALSE;
     gboolean dir_with_children = FALSE;
+    GFileType file_type = G_FILE_TYPE_UNKNOWN;
 
     SSelectionFSTree* s_selection = (SSelectionFSTree*) data;
 
@@ -771,9 +792,10 @@ selection_foreach_baum_fs_to_baum_fs( Projekt* zond, Baum baum,
         return 0;
     }
 
+    file_type = g_file_query_file_type( file_source, G_FILE_QUERY_INFO_NONE, NULL );
     //Falls Verzeichnis: Prüfen, ob Datei drinne, dann dir_with_children = TRUE
-    if ( g_file_query_file_type( file_source, G_FILE_QUERY_INFO_NONE, NULL ) ==
-            G_FILE_TYPE_DIRECTORY && (!s_selection->kind || s_selection->expanded) )
+    if (  file_type == G_FILE_TYPE_DIRECTORY &&
+            (!s_selection->kind || s_selection->expanded) )
     {
         GError* error = NULL;
         GFile* file_out = NULL;
@@ -806,15 +828,20 @@ selection_foreach_baum_fs_to_baum_fs( Projekt* zond, Baum baum,
     }
 
     //Kopieren/verschieben
-    if ( g_file_query_file_type( file_source, G_FILE_QUERY_INFO_NONE, NULL )
-            != G_FILE_TYPE_REGULAR && !zond->clipboard.ausschneiden )
-            rc = selection_copy_dir( zond, file_source, s_selection->file_parent, &basename, errmsg );
+    if ( file_type  == G_FILE_TYPE_DIRECTORY )
+    {
+        if ( !zond->clipboard.ausschneiden ) rc = selection_copy_dir( zond,
+                file_source, s_selection->file_parent, &basename, errmsg );
+        else rc = selection_move_dir( zond, file_source,
+                s_selection->file_parent, &basename, errmsg );
+    }
     else rc = selection_move_file( zond, file_source, s_selection->file_parent, zond->clipboard.ausschneiden, &basename, errmsg );
 
     g_object_unref( file_source );
 
     if ( rc == -1 ) ERROR_PAO( "selection_move_file/_copy_dir" )
     else if ( rc == 1 ) return 1; //selection_foreach interpretiert dies als Abbruch
+    else if ( rc == 2 ) return 0; //nur bei selection_move_file/_dir möglich
 
     s_selection->inserted = TRUE;
 
