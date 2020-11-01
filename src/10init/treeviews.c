@@ -1,5 +1,5 @@
 /*
-zond (baum_inhalt_und_auswertung.c) - Akten, Beweisstücke, Unterlagen
+zond (treeviews.c) - Akten, Beweisstücke, Unterlagen
 Copyright (C) 2020  pelo america
 
 This program is free software: you can redistribute it and/or modify

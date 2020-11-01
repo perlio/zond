@@ -875,7 +875,6 @@ cb_settings_zoom( GtkMenuItem* item, gpointer data )
 
     gchar* text = g_strdup_printf( "%.0f", g_settings_get_double( zond->settings, "zoom" ) );
     rc = abfrage_frage( zond->app_window, "Zoom:", "Faktor eingeben", &text );
-    if ( !text ) return;
     if ( !g_strcmp0( text, "" ) )
     {
         g_free( text );
@@ -1017,27 +1016,9 @@ init_menu( Projekt* zond )
     gtk_menu_shell_append ( GTK_MENU_SHELL(projektmenu), sep_projekt1item_2);
     gtk_menu_shell_append ( GTK_MENU_SHELL(projektmenu), beendenitem );
 
-/*  Menu Dateien */
-    GtkWidget* menu_dateien = gtk_menu_new();
-
-    GtkWidget* item_sep_dateien0 = gtk_separator_menu_item_new( );
-    gtk_menu_shell_append( GTK_MENU_SHELL(menu_dateien), item_sep_dateien0 );
-
-    //PDF reparieren
-    GtkWidget* item_clean_pdf = gtk_menu_item_new_with_label( "PDF reparieren" );
-    gtk_menu_shell_append( GTK_MENU_SHELL(menu_dateien), item_clean_pdf );
-    g_signal_connect( item_clean_pdf, "activate", G_CALLBACK(cb_item_clean_pdf), zond );
-
-    //Text-Suche
-    GtkWidget* item_textsuche = gtk_menu_item_new_with_label( "Text suchen" );
-    gtk_menu_shell_append( GTK_MENU_SHELL(menu_dateien), item_textsuche);
-    g_signal_connect( item_textsuche, "activate", G_CALLBACK(cb_item_textsuche), zond );
-
-    GtkWidget* item_ocr = gtk_menu_item_new_with_label( "OCR" );
-    gtk_menu_shell_append( GTK_MENU_SHELL(menu_dateien), item_ocr );
-    g_signal_connect( item_ocr, "activate", G_CALLBACK(cb_datei_ocr), zond );
-
-/*  Menu Bearbeiten */
+/*********************
+*  Menu Struktur
+*********************/
     GtkWidget* strukturmenu = gtk_menu_new();
 
     //Punkt erzeugen
@@ -1179,6 +1160,28 @@ init_menu( Projekt* zond )
     gtk_menu_shell_append( GTK_MENU_SHELL(strukturmenu), sep_struktur2item );
     gtk_menu_shell_append( GTK_MENU_SHELL(strukturmenu), item_text_anbindung );
     gtk_menu_shell_append( GTK_MENU_SHELL(strukturmenu), icon_change_item );
+
+/*********************
+*  Menu Pdf-Dateien
+*********************/
+    GtkWidget* menu_dateien = gtk_menu_new();
+
+    GtkWidget* item_sep_dateien0 = gtk_separator_menu_item_new( );
+    gtk_menu_shell_append( GTK_MENU_SHELL(menu_dateien), item_sep_dateien0 );
+
+    //PDF reparieren
+    GtkWidget* item_clean_pdf = gtk_menu_item_new_with_label( "PDF reparieren" );
+    gtk_menu_shell_append( GTK_MENU_SHELL(menu_dateien), item_clean_pdf );
+    g_signal_connect( item_clean_pdf, "activate", G_CALLBACK(cb_item_clean_pdf), zond );
+
+    //Text-Suche
+    GtkWidget* item_textsuche = gtk_menu_item_new_with_label( "Text suchen" );
+    gtk_menu_shell_append( GTK_MENU_SHELL(menu_dateien), item_textsuche);
+    g_signal_connect( item_textsuche, "activate", G_CALLBACK(cb_item_textsuche), zond );
+
+    GtkWidget* item_ocr = gtk_menu_item_new_with_label( "OCR" );
+    gtk_menu_shell_append( GTK_MENU_SHELL(menu_dateien), item_ocr );
+    g_signal_connect( item_ocr, "activate", G_CALLBACK(cb_datei_ocr), zond );
 
 /*  Menu Suchen  */
     GtkWidget* suchenmenu = gtk_menu_new( );

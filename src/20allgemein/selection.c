@@ -210,6 +210,36 @@ selection_kopieren( Projekt* zond, Baum baum_von, gint anchor_id, gboolean kind,
 
 
 /** Dateien oder Ordner anbinden **/
+static gint
+selection_anbinden_zu_baum( Projekt* zond, GtkTreeIter** iter, gboolean kind,
+        GArray* arr_new_nodes, gchar** errmsg )
+{
+    for ( gint i = 0; i < arr_new_nodes->len; i++ )
+    {
+        gint node_id_new = 0;
+        GtkTreeIter* iter_new = NULL;
+
+        node_id_new = g_array_index( arr_new_nodes, gint, i );
+
+        //datei in baum_inhalt einfügen
+        iter_new = db_baum_knoten_mit_kindern( zond, FALSE, BAUM_INHALT, node_id_new,
+                *iter, kind, errmsg );
+        if ( !iter_new ) ERROR_PAO( "db_baum_knoten" )
+
+        expand_row( zond, BAUM_INHALT, iter_new );
+        gtk_tree_view_columns_autosize( ((Projekt*) zond)->treeview[BAUM_INHALT] );
+
+        if ( *iter ) gtk_tree_iter_free( *iter );
+        *iter = gtk_tree_iter_copy( iter_new );
+        gtk_tree_iter_free( iter_new );
+
+        kind = FALSE;
+    }
+
+    return 0;
+}
+
+
 static gchar*
 selection_get_icon_name( Projekt* zond, GFile* file )
 {
@@ -222,9 +252,14 @@ selection_get_icon_name( Projekt* zond, GFile* file )
     if ( !info ) return g_strdup( "dialog-error" );
 
     content_type = (gchar*) g_file_info_get_content_type( info );
+    if ( !content_type )
+    {
+        g_object_unref( info );
+        return g_strdup( "dialog-error" );
+    }
 
     if ( g_content_type_is_mime_type( content_type, "application/pdf" ) ) icon_name = g_strdup( "pdf" );
-    else if ( g_content_type_is_mime_type( content_type, "audio" ) ) icon_name = g_strdup( "audio-x-generic" );
+    else if ( g_content_type_is_a( content_type, "audio" ) ) icon_name = g_strdup( "audio-x-generic" );
     else
     {
         icon = g_file_info_get_icon( info );
@@ -233,7 +268,7 @@ selection_get_icon_name( Projekt* zond, GFile* file )
     }
 
     g_free( content_type );
- //   g_object_unref( info );
+//    g_object_unref( info );
 
     return icon_name;
 }
@@ -295,44 +330,39 @@ selection_datei_einfuegen_in_db( Projekt* zond, GFile* file, gint node_id,
     eingefügt: node_id
     nicht eingefügt, weil schon angebunden: 0 **/
 static gint
-selection_datei_anbinden( Projekt* zond, GFile* file, gint node_id, GtkTreeIter* iter,
-        gboolean child, GtkTreeIter** new_iter, gint* zaehler, gchar** errmsg )
+selection_datei_anbinden( Projekt* zond, InfoWindow* info_window, GFile* file, gint node_id,
+        gboolean child, gint* zaehler, gchar** errmsg )
 {
     gint rc = 0;
     gint new_node_id = 0;
 
+    if ( info_window->cancel ) return -2;
+
+    //Prüfen, ob Datei schon angebunden
     gchar* rel_path = selection_get_rel_path_from_file( zond, file );
     rc = db_get_node_id_from_rel_path( zond, rel_path, errmsg );
-    g_free( rel_path );
-    if ( rc == -1 ) ERROR_PAO( "db_get_node_id_from_rel_path" )
-    else if ( rc > 0 ) return 0;
+    if ( rc == -1 )
+    {
+        g_free( rel_path );
+        ERROR_PAO( "db_get_node_id_from_rel_path" )
+    }
+    else if ( rc > 0 )
+    {
+        gchar* text = g_strconcat( rel_path, " ...bereits angebunden", NULL );
+        info_window_set_message( info_window, text );
+        g_free( text );
 
-    //datei in db einfügen
-    rc = db_begin( zond, errmsg );
-    if ( rc ) ERROR_PAO( "db_begin" )
+        return 0; //Wenn angebunden: nix machen
+    }
+
+    info_window_set_message( info_window, rel_path );
+    g_free( rel_path );
 
     new_node_id = selection_datei_einfuegen_in_db( zond, file, node_id,
             child, errmsg );
-    if ( new_node_id == -1 ) ERROR_PAO_ROLLBACK( "selection_datei_einfuegen_in_db" )
-
-    //datei in baum_inhalt einfügen
-    *new_iter = db_baum_knoten( zond, BAUM_INHALT, new_node_id, iter, child, errmsg );
-    if ( !(*new_iter) ) ERROR_PAO_ROLLBACK( "db_baum_knoten" )
-
-    rc = db_commit( zond, errmsg );
-    if ( rc )
-    {
-        gtk_tree_iter_free( *new_iter );
-
-        ERROR_PAO_ROLLBACK( "db_commit" )
-    }
+    if ( new_node_id == -1 ) ERROR_PAO( "selection_datei_einfuegen_in_db" )
 
     (*zaehler)++;
-
-    expand_row( zond, BAUM_INHALT, *new_iter );
-    gtk_tree_view_columns_autosize( ((Projekt*) zond)->treeview[BAUM_INHALT] );
-
-    while ( gtk_events_pending( ) ) gtk_main_iteration( );
 
     return new_node_id;
 }
@@ -341,30 +371,29 @@ selection_datei_anbinden( Projekt* zond, GFile* file, gint node_id, GtkTreeIter*
 /*  Fehler: Rückgabe -1
 **  ansonsten: Id des zunächst erzeugten Knotens  */
 static gint
-selection_ordner_anbinden_rekursiv( Projekt* zond, GFile* file, gint node_id,
-        GtkTreeIter* iter, gboolean child, GtkTreeIter** new_iter, gint* zaehler,
-        gchar** errmsg )
+selection_ordner_anbinden_rekursiv( Projekt* zond, InfoWindow* info_window,
+        GFile* file, gint node_id, gboolean child, gint* zaehler, gchar** errmsg )
 {
     gint rc = 0;
     gint new_node_id = 0;
+    gchar* text = 0;
+    gchar* basename = NULL;
     GError* error = NULL;
 
-    rc = db_begin( zond, errmsg );
-    if ( rc ) ERROR_PAO( "db_begin" )
+    if ( info_window->cancel ) return -2;
 
-    gchar* basename = g_file_get_basename( file );
+    basename = g_file_get_basename( file );
 
     new_node_id = db_insert_node( zond, BAUM_INHALT, node_id, child, "folder",
             basename, errmsg );
+
+    text = g_strconcat( "Verzeichnis eingefügt: ", basename, NULL );
+    info_window_set_message( info_window, text );
+    g_free( text );
+
     g_free( basename );
+
     if ( new_node_id == -1 ) ERROR_SQL_ROLLBACK( "db_insert_node" )
-
-    //datei in baum_inhalt einfügen
-    *new_iter = db_baum_knoten( zond, BAUM_INHALT, new_node_id, iter, child, errmsg );
-    if ( !(*new_iter) ) ERROR_PAO_ROLLBACK( "db_baum_knoten" )
-
-    rc = db_commit( zond, errmsg );
-    if ( rc ) ERROR_SQL_ROLLBACK( "db_commit" )
 
     GFileEnumerator* enumer = g_file_enumerate_children( file, "*", G_FILE_QUERY_INFO_NONE, NULL, &error );
     if ( !enumer )
@@ -381,10 +410,8 @@ selection_ordner_anbinden_rekursiv( Projekt* zond, GFile* file, gint node_id,
     GFile* file_child = NULL;
     GFileInfo* info_child = NULL;
     gint new_node_id_loop_tmp = 0;
-    GtkTreeIter* new_iter_loop_tmp = NULL;;
 
     gint new_node_id_loop = new_node_id;
-    GtkTreeIter* new_iter_loop = gtk_tree_iter_copy( *new_iter );
 
     child = TRUE;
 
@@ -405,50 +432,44 @@ selection_ordner_anbinden_rekursiv( Projekt* zond, GFile* file, gint node_id,
             GFileType type = g_file_info_get_file_type( info_child );
             if ( type == G_FILE_TYPE_DIRECTORY )
             {
-                new_node_id_loop_tmp = selection_ordner_anbinden_rekursiv( zond, file_child,
-                        new_node_id_loop, new_iter_loop, child, &new_iter_loop_tmp,
+                new_node_id_loop_tmp = selection_ordner_anbinden_rekursiv( zond,
+                        info_window, file_child, new_node_id_loop, child,
                         zaehler, errmsg );
 
                 if ( new_node_id_loop_tmp == -1 )
                 {
-                    gtk_tree_iter_free( new_iter_loop );
                     g_object_unref( enumer );
 
                     return -1;
                 }
+                else if ( new_node_id_loop_tmp == -2 ) break; //abgebrochen
             }
             else if ( type == G_FILE_TYPE_REGULAR )
             {
-                new_node_id_loop_tmp = selection_datei_anbinden( zond, file_child,
-                        new_node_id_loop, new_iter_loop, child, &new_iter_loop_tmp, zaehler, errmsg );
+                new_node_id_loop_tmp = selection_datei_anbinden( zond,
+                        info_window, file_child, new_node_id_loop, child,
+                        zaehler, errmsg );
 
                 if ( new_node_id_loop_tmp == -1 )
                 {
-                    if ( errmsg ) *errmsg = prepend_string( *errmsg,
-                            g_strdup( "Bei Aufruf datei_anbinden:\n" ) );
-                    gtk_tree_iter_free( new_iter_loop );
                     g_object_unref( enumer );
+
+                    if ( errmsg ) *errmsg = prepend_string( *errmsg, g_strdup(
+                            "Bei Aufruf datei_anbinden:\n" ) );
 
                     return -1;
                 }
+                else if ( new_node_id_loop_tmp == -2 ) break; //abgebrochen
                 else if ( new_node_id_loop_tmp == 0 ) continue;
             }
 
-            expand_row( zond, BAUM_INHALT, new_iter_loop_tmp );
-
             new_node_id_loop = new_node_id_loop_tmp;
-
-            gtk_tree_iter_free( new_iter_loop );
-            new_iter_loop = gtk_tree_iter_copy( new_iter_loop_tmp );
-            gtk_tree_iter_free( new_iter_loop_tmp );
-
             child = FALSE;
         } //ende if ( child )
         else break;
     }
 
     g_object_unref( enumer );
-    gtk_tree_iter_free( new_iter_loop );
 
     return new_node_id;
 }
@@ -456,56 +477,63 @@ selection_ordner_anbinden_rekursiv( Projekt* zond, GFile* file, gint node_id,
 
 typedef struct {
     Projekt* zond;
-    GtkTreeIter* iter;
     gint anchor_id;
+    GArray* arr_new_nodes;
     gboolean kind;
     gint zaehler;
+    InfoWindow* info_window;
 } SSelectionAnbinden;
 
 
 static gint
-selection_foreach_anbinden( Projekt* zond, Baum baum, GtkTreeIter* iter, gint node_id, gpointer data, gchar** errmsg )
+selection_foreach_anbinden( Projekt* zond, Baum baum, GtkTreeIter* iter,
+        gint node_id, gpointer data, gchar** errmsg )
 {
+    gint rc = 0;
+
     SSelectionAnbinden* s_selection = (SSelectionAnbinden*) data;
 
     //datei ermitteln und anbinden
     gchar* full_path = fs_tree_get_full_path( s_selection->zond, iter );
+
     GFile* file = g_file_new_for_path( full_path );
-    GtkTreeIter* iter_new = NULL;
+    g_free( full_path );
     gint new_node_id = 0;
 
     if ( g_file_query_file_type( file, G_FILE_QUERY_INFO_NONE, NULL ) ==
             G_FILE_TYPE_DIRECTORY )
     {
-        new_node_id = selection_ordner_anbinden_rekursiv( s_selection->zond, file, s_selection->anchor_id,
-                s_selection->iter, s_selection->kind, &iter_new, &s_selection->zaehler, errmsg );
-        g_free( full_path );
+        new_node_id = selection_ordner_anbinden_rekursiv( s_selection->zond,
+                s_selection->info_window, file, s_selection->anchor_id,
+                s_selection->kind, &s_selection->zaehler, errmsg );
         g_object_unref( file );
-        if ( new_node_id == -1 ) ERROR_PAO( "datei_ordner_anbinden_rekursiv" )
+        if ( new_node_id == -1 )
+                ERROR_PAO_ROLLBACK( "selection_datei_ordner_anbinden_rekursiv" )
     }
     else
     {
-        new_node_id = selection_datei_anbinden( s_selection->zond, file, s_selection->anchor_id, s_selection->iter, s_selection->kind,
-                &iter_new, &s_selection->zaehler, errmsg );
-        g_free( full_path );
+        new_node_id = selection_datei_anbinden( s_selection->zond,
+                s_selection->info_window, file, s_selection->anchor_id, s_selection->kind,
+                &s_selection->zaehler, errmsg );
         g_object_unref( file );
-        if ( new_node_id == -1 ) ERROR_PAO( "datei_anbinden" )
+        if ( new_node_id == -1 ) ERROR_PAO_ROLLBACK( "selection_datei_anbinden" )
+        else if ( new_node_id == 0 ) return 0;
     }
 
-    if ( s_selection->iter ) gtk_tree_iter_free( s_selection->iter );
-    s_selection->iter = gtk_tree_iter_copy( iter_new );
-    gtk_tree_iter_free( iter_new );
+    if ( new_node_id == -2 ) return 1; //abgebrochen!
 
-    //nur bei erstem Durchgang child von root_node - danach darunter
-    s_selection->anchor_id = new_node_id;
+    g_array_append_val( s_selection->arr_new_nodes, new_node_id );
+
     s_selection->kind = FALSE;
+    s_selection->anchor_id = new_node_id;
 
     return 0;
 }
 
 
 static gint
-selection_anbinden( Projekt* zond, gint anchor_id, gboolean kind, gchar** errmsg )
+selection_anbinden( Projekt* zond, gint anchor_id, gboolean kind, GArray* arr_new_nodes,
+        InfoWindow* info_window, gchar** errmsg )
 {
     gint rc = 0;
     GtkTreeIter* iter = NULL;
@@ -515,24 +543,36 @@ selection_anbinden( Projekt* zond, gint anchor_id, gboolean kind, gchar** errmsg
     iter = baum_abfragen_aktuellen_cursor( zond->treeview[BAUM_INHALT] );
 
     s_selection.zond = zond;
-    s_selection.iter = iter;
+    s_selection.arr_new_nodes = arr_new_nodes;
     s_selection.anchor_id = anchor_id;
     s_selection.kind = kind;
     s_selection.zaehler = 0;
+    s_selection.info_window = info_window;
 
-    rc = selection_foreach( zond, BAUM_FS, zond->clipboard.arr_ref, selection_foreach_anbinden, &s_selection, errmsg );
-    if ( s_selection.iter )
+    rc = db_begin( zond, errmsg );
+    if ( rc ) ERROR_PAO( "db_begin" )
+
+    rc = selection_foreach( zond, BAUM_FS, zond->clipboard.arr_ref,
+            selection_foreach_anbinden, &s_selection, errmsg );
+    if ( rc ) ERROR_PAO_ROLLBACK( "selection_foreach" )
+
+    rc = selection_anbinden_zu_baum( zond, &iter, kind, arr_new_nodes, errmsg );
+    if ( rc ) ERROR_PAO_ROLLBACK( "selection_foreach" );
+
+    rc = db_commit( zond, errmsg );
+    if ( rc ) ERROR_PAO_ROLLBACK( "db_commit" )
+
+    if ( iter )
     {
-        baum_setzen_cursor( zond, BAUM_INHALT, s_selection.iter );
-        gtk_tree_iter_free( s_selection.iter );
+        baum_setzen_cursor( zond, BAUM_INHALT, iter );
+        gtk_tree_iter_free( iter );
     }
-    if ( rc ) ERROR_PAO( "selection_foreach" )
 
-    gchar* anzahl = g_strdup_printf( "%d Dateien angebunden", s_selection.zaehler );
-    meldung( zond->app_window, anzahl, NULL );
-    g_free( anzahl );
+    gchar* text = g_strdup_printf( "%i Datei(en) angebunden", s_selection.zaehler );
+    info_window_set_message( info_window, text );
+    g_free( text );
 
-    return 0;
+    return s_selection.zaehler;
 }
 
 
@@ -679,7 +719,7 @@ selection_move_dir( Projekt* zond, GFile* file_source, GFile* file_parent, gchar
 }
 
 
-gint selection_copy_dir( Projekt*, GFile*, GFile*, gchar**, gchar** );
+static gint selection_copy_dir( Projekt*, GFile*, GFile*, gchar**, gchar** );
 
 
 static gint
@@ -714,7 +754,7 @@ selection_foreach_copy_dir( Projekt* zond, GFile* file, GFile* child,
 
 
 /** Gibt niemals 2 zurück, da Verzeichnis immer eingefügt wird **/
-gint
+static gint
 selection_copy_dir( Projekt* zond, GFile* file_source, GFile* file_parent,
         gchar** basename, gchar** errmsg )
 {
@@ -1083,14 +1123,17 @@ selection_paste( Projekt* zond, gboolean kind )
         }
         else if ( baum == BAUM_INHALT && !zond->clipboard.ausschneiden )
         {
+            InfoWindow* info_window = NULL;
+            GArray* arr_new_nodes = NULL;
+
             if ( anchor_id == 0 ) kind = TRUE;
             else
             {
                 rc = hat_vorfahre_datei( zond, baum, anchor_id, kind, &errmsg );
                 if ( rc == -1 )
                 {
-                    meldung( zond->app_window, "Bei Aufruf selection_testen_"
-                            "zulaessige_vorfahren:\n\n", errmsg, NULL );
+                    meldung( zond->app_window, "Bei Aufruf hat_vorfahre_datei:\n\n",
+                            errmsg, NULL );
                     g_free( errmsg );
 
                     return;
@@ -1105,15 +1148,18 @@ selection_paste( Projekt* zond, gboolean kind )
                 }
             }
 
-            rc = selection_anbinden( zond, anchor_id, kind, &errmsg );
-            if ( rc )
-            {
-                meldung( zond->app_window, "Einfügen nicht möglich -\n\n"
-                        "Bei Aufruf selection_anbinden:\n", errmsg, NULL );
-                g_free( errmsg );
+            arr_new_nodes = g_array_new( FALSE, FALSE, sizeof( gint ) );
+            info_window = info_window_open( zond->app_window, "Dateien anbinden" );
 
-                return;
+            rc = selection_anbinden( zond, anchor_id, kind, arr_new_nodes, info_window, &errmsg );
+            if ( rc == -1 )
+            {
+                info_window_set_message( info_window, errmsg );
+                g_free( errmsg );
             }
+
+            g_array_unref( arr_new_nodes );
+            info_window_close( info_window );
         }
     }
     else if ( baum_selection == BAUM_INHALT )

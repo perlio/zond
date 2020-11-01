@@ -1,5 +1,10 @@
 /* ToDo-Liste
 
+- suchen
+    - Menu Struktur vrschieben
+    - Einheitliche Suche (Dateiname, node_text, text)
+    - ggf. Beschränkbarkeit auf Bäume/Zweige/Punkte
+
 - BAUM_INHALT
     - Anbindungen in PDF einfügen
     - Anbindungen in PDF löschen

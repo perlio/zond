@@ -94,6 +94,7 @@ choose_files( GtkWindow* window, const gchar* title_text, gchar* accept_text,
 {
     GtkWidget *dialog = NULL;
     gint rc = 0;
+    GSList* list = NULL;
 
     dialog = gtk_file_chooser_dialog_new( title_text,
             window, action, "_Abbrechen",
@@ -111,14 +112,8 @@ choose_files( GtkWindow* window, const gchar* title_text, gchar* accept_text,
             ".ZND" );
 
     rc = gtk_dialog_run( GTK_DIALOG(dialog) );
-    if ( !(rc == GTK_RESPONSE_ACCEPT) )
-    {
-        gtk_widget_destroy( dialog );
-        return NULL;
-    }
-
-    GSList* list = NULL;
-    list = gtk_file_chooser_get_uris( GTK_FILE_CHOOSER(dialog) );
+    if ( rc == GTK_RESPONSE_ACCEPT )
+            list = gtk_file_chooser_get_uris( GTK_FILE_CHOOSER(dialog) );
 
     //Dialog schließen
     gtk_widget_destroy(dialog);
@@ -260,7 +255,11 @@ dialog_with_buttons( GtkWidget* window, const gchar* message,
 
     res = gtk_dialog_run( GTK_DIALOG(dialog) );
 
-    if ( text ) *text = g_strdup( gtk_entry_get_text( GTK_ENTRY(entry) ) );
+    if ( text )
+    {
+        g_free( *text );
+        *text = g_strdup( gtk_entry_get_text( GTK_ENTRY(entry) ) );
+    }
 
     gtk_widget_destroy( dialog );
 
@@ -276,7 +275,7 @@ abfrage_frage( GtkWidget* window, const gchar* message, const gchar* secondary, 
     gint res;
 
     res = dialog_with_buttons( window, message, secondary, text, "Ja",
-            GTK_RESPONSE_YES, "Abbrechen", GTK_RESPONSE_CANCEL, NULL );
+            GTK_RESPONSE_YES, "Nein", GTK_RESPONSE_NO, NULL );
 
     return res;
 }
