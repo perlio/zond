@@ -2069,32 +2069,15 @@ viewer_einrichten_fenster( PdfViewer* pv )
 
 
 void
-viewer_display_document( PdfViewer* pv, DisplayedDocument* dd, PdfPos pdf_pos )
+viewer_display_document( PdfViewer* pv, DisplayedDocument* dd )
 {
     pv->dd = dd;
 
     viewer_create_layout( pv );
 
-    if ( pdf_pos.seite > (pv->arr_pages->len - 1) ) pdf_pos.seite = pv->arr_pages->len - 1;
-
     viewer_einrichten_layout( pv );
 
     viewer_init_thread_pools( pv );
-
-    if ( pdf_pos.seite == 0 && pdf_pos.index == 0 )
-            g_signal_emit_by_name( pv->v_adj, "value-changed" );
-    else viewer_springen_zu_pos_pdf( pv, pdf_pos, 0.0 );
-/*
-    //zur zunächst anzuzeigenden Position springen
-    //(ersetzt render_sihtbare_seiten, weil in cb_adj_value_changd schon aufgerufen
-    gdouble value_seite = viewer_abfragen_value_von_seite( pv, pdf_pos.seite );
-    gdouble value = value_seite + (pdf_pos.index * pv->zoom / 100);
-    if ( value != 0 ) gtk_adjustment_set_value( pv->v_adj, value );
-    else g_signal_emit_by_name( pv->v_adj, "value-changed" );
-
-    while ( gtk_events_pending( ) ) gtk_main_iteration( );
-*/
-    render_sichtbare_thumbs( pv );
 
     gtk_widget_grab_focus( pv->layout );
 

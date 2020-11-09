@@ -152,21 +152,11 @@ oeffnen_auszug( Projekt* zond, gint node_id, gchar** errmsg )
             }
         }
     }
-    PdfPos pos_von = { 0, 0 };
 
     PdfViewer* pv = viewer_start_pv( zond );
-    viewer_display_document( pv, dd, pos_von );
+    viewer_display_document( pv, dd );
 
     return 0;
-}
-
-
-static void
-close_pid( GPid pid, gint status, gpointer user_data )
-{
-    g_spawn_close_pid( pid );
-
-    return;
 }
 
 
@@ -193,6 +183,10 @@ oeffnen_internal_viewer( Projekt* zond, const gchar* rel_path, Anbindung* anbind
                     if ( pos_pdf ) pos_von = *pos_pdf;
 
                     gtk_window_present( GTK_WINDOW(pv->vf) );
+
+                    if ( pos_von.seite > (pv->arr_pages->len - 1) )
+                            pos_von.seite = pv->arr_pages->len - 1;
+
                     viewer_springen_zu_pos_pdf( pv, pos_von, 0.0 );
 
                     return 0;
@@ -208,9 +202,21 @@ oeffnen_internal_viewer( Projekt* zond, const gchar* rel_path, Anbindung* anbind
     if ( pos_pdf ) pos_von = *pos_pdf;
 
     PdfViewer* pv = viewer_start_pv( zond );
-    viewer_display_document( pv, dd, pos_von );
+    viewer_display_document( pv, dd );
+
+    if ( pos_von.seite > (pv->arr_pages->len - 1) ) pos_von.seite = pv->arr_pages->len - 1;
+    viewer_springen_zu_pos_pdf( pv, pos_von, 0.0 );
 
     return 0;
+}
+
+
+static void
+close_pid( GPid pid, gint status, gpointer user_data )
+{
+    g_spawn_close_pid( pid );
+
+    return;
 }
 
 

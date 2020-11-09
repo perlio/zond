@@ -16,6 +16,4 @@ gint pdf_text_anzeigen_ergebnisse( Projekt*, gchar*, GPtrArray*, GArray*, gchar*
 
 gint pdf_textsuche( Projekt*, InfoWindow*, GPtrArray*, const gchar*, GArray**, gchar** );
 
-gchar* pdf_abfragen_search_text( GtkWindow* );
-
 #endif // PDF_TEXT_H_INCLUDED

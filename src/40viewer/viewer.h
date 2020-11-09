@@ -47,7 +47,7 @@ gint viewer_foreach( GPtrArray*, Document*, gint, gint (*) (PdfViewer*, gint,
 
 void viewer_init_thread_pools( PdfViewer* );
 
-void viewer_display_document( PdfViewer*, DisplayedDocument*, PdfPos );
+void viewer_display_document( PdfViewer*, DisplayedDocument* );
 
 PdfViewer* viewer_start_pv( Projekt* );
 
